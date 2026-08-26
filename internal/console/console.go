@@ -107,6 +107,12 @@ func (c *Console) Command(action, subject string) (string, error) {
 			return "", err
 		}
 		return "dose-issued", nil
+	case "dose_restart":
+		// 投加泵启动失败后,值班员从这里重新下发启动,绕过冷却立即重试。
+		if err := c.ctrl.RestartDosing(subject); err != nil {
+			return "", err
+		}
+		return "dose-restarted", nil
 	case "dose_stop":
 		if err := c.doser.Stop("console"); err != nil {
 			return "", err

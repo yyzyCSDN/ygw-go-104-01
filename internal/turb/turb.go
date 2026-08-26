@@ -122,11 +122,55 @@ func (c *Controller) EvaluateDosing(source string) error {
 		Amount: c.limits.Clamp(c.plan.AmountFor(q.Chlorine)),
 		At:     time.Now(),
 	}
-	return c.StartDosing(cmd)
+	if err := c.StartDosing(cmd); err != nil {
+		// 启动失败:保持冷却,避免自动回路在故障态下反复打火;
+		// 值班员可通过 dose_restart 入口手动重新下发启动(绕过冷却)。
+		return err
+	}
+	return nil
 }
 
 func (c *Controller) StartDosing(cmd dose.Command) error {
-	_ = c.doser.Start(cmd)
+	if err := c.doser.Start(cmd); err != nil {
+		// 启泵失败如实反映:记录失败、上报故障事件,不要发"投加成功"误导值班员。
+		_ = c.recordFailure(cmd, err)
+		_, _ = c.bus.Publish(event.KindDose, cmd.Source, map[string]any{
+			"command": cmd,
+			"ok":       false,
+			"error":    err.Error(),
+		})
+		return fmt.Errorf("start dosing: %w", err)
+	}
+	_, _ = c.bus.Publish(event.KindDose, cmd.Source, cmd)
+	return c.recordDose(cmd)
+}
+
+// RestartDosing 供值班员在投加泵启动失败后从中控手动重新下发启动。
+// 它绕过自动冷却限流,确保余氯走低的紧急情况下能立即重试。
+func (c *Controller) RestartDosing(source string) error {
+	q, ok := c.store.Latest(source)
+	if !ok {
+		return ErrUnknownQualitySource
+	}
+	// 手动重新下发:清除该来源冷却,允许立即再次评估补投。
+	c.cooldown.Reset(source)
+	cmd := dose.Command{
+		ID:     fmt.Sprintf("manual-%d", time.Now().UnixNano()),
+		Source: source,
+		Amount: c.limits.Clamp(c.plan.AmountFor(q.Chlorine)),
+		At:     time.Now(),
+	}
+	if err := c.doser.Restart(cmd); err != nil {
+		_ = c.recordFailure(cmd, err)
+		_, _ = c.bus.Publish(event.KindDose, cmd.Source, map[string]any{
+			"command": cmd,
+			"ok":       false,
+			"error":    err.Error(),
+		})
+		return fmt.Errorf("restart dosing: %w", err)
+	}
+	// 重新启动成功后补记冷却,避免与自动回路叠加重复投加。
+	c.cooldown.Mark(source, time.Now())
 	_, _ = c.bus.Publish(event.KindDose, cmd.Source, cmd)
 	return c.recordDose(cmd)
 }

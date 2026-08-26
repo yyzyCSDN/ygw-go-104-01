@@ -11,22 +11,66 @@ table { border-collapse: collapse; width: 100%; }
 td, th { border: 1px solid #d8dee4; padding: 6px 10px; text-align: left; }
 .bad { color: #b42318; font-weight: 600; }
 .ok { color: #087443; font-weight: 600; }
+.warn { color: #b54708; font-weight: 600; }
+button { padding: 4px 12px; border: 1px solid #d0d7de; border-radius: 4px; background: #fff; cursor: pointer; }
+button.danger { border-color: #b42318; color: #b42318; }
+.muted { color: #6e7781; }
 </style>
 </head>
 <body>
 <h1>自来水厂加氯加药与滤池控制系统</h1>
 <section id="summary"><p>正在加载中控数据…</p></section>
 <script>
+function pumpStateClass(s) {
+  if (s === "running") return "ok";
+  if (s === "fault") return "bad";
+  return "muted";
+}
+function doseStateClass(s) {
+  if (s === "dosing") return "ok";
+  if (s === "fault") return "bad";
+  return "muted";
+}
+async function sendCommand(action, subject) {
+  try {
+    const res = await fetch("/api/console/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ Action: action, Subject: subject || "inlet" })
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      alert("操作失败：" + txt);
+    }
+  } catch (e) {
+    alert("请求失败：" + e);
+  }
+  refresh();
+}
 async function refresh() {
   try {
     const res = await fetch("/api/console/summary");
     const data = await res.json();
     let html = "<table><tr><th>项目</th><th>内容</th></tr>";
-    html += "<tr><td>投加状态</td><td>" + (data.Dosing ? data.Dosing.State : "-") + "</td></tr>";
-    html += "<tr><td>投加次数</td><td>" + (data.Dosing ? data.Dosing.Executed : 0) + "</td></tr>";
+    const ds = data.Dosing || {};
+    const dCls = doseStateClass(ds.State);
+    html += "<tr><td>投加状态</td><td class=\"" + dCls + "\">" + (ds.State || "-") + "</td></tr>";
+    if (ds.Fault) {
+      html += "<tr><td>投加故障</td><td class=\"bad\">" + ds.Fault + "</td></tr>";
+    }
+    html += "<tr><td>投加次数</td><td>" + (ds.Executed || 0) + "</td></tr>";
     html += "<tr><td>记录数</td><td>" + data.RecordsWritten + "</td></tr>";
     html += "<tr><td>记录句柄</td><td>" + data.RecordHandles + "</td></tr>";
-    html += "</table><h3>滤池状态</h3><table><tr><th>滤池</th><th>状态</th><th>就地</th><th>反冲次数</th></tr>";
+    html += "<tr><td>操作</td><td><button class=\"danger\" onclick=\"sendCommand('dose_restart','inlet')\">重新启动投加</button> <button onclick=\"sendCommand('dose_stop','inlet')\">停止投加</button></td></tr>";
+    html += "</table>";
+    // 投加泵真实状态必须与现场一致:running/fault/stopped 如实显示,故障时给值班员重新下发启动的入口。
+    html += "<h3>投加泵</h3><table><tr><th>泵编号</th><th>状态</th><th>启动</th><th>停止</th><th>运行秒</th></tr>";
+    for (const p of (data.Pumps || [])) {
+      const cls = pumpStateClass(p.State);
+      html += "<tr><td>" + p.ID + "</td><td class=\"" + cls + "\">" + p.State + "</td><td>" + p.Starts + "</td><td>" + p.Stops + "</td><td>" + p.RunSeconds + "</td></tr>";
+    }
+    html += "</table>";
+    html += "<h3>滤池状态</h3><table><tr><th>滤池</th><th>状态</th><th>就地</th><th>反冲次数</th></tr>";
     for (const id in data.Filters) {
       const f = data.Filters[id];
       const cls = f.State === "filtering" ? "ok" : "bad";
