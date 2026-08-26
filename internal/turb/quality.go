@@ -35,9 +35,9 @@ func NewStore() *Store {
 func (s *Store) Put(q Quality) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.latest[q.ID]; ok {
-		return
-	}
+	// Always store the latest reading for a source so dosing decisions act on
+	// current values. The first-write-wins guard that used to live here dropped
+	// every subsequent reading, leaving EvaluateDosing to judge stale data.
 	s.latest[q.ID] = q
 	h := s.hist[q.ID]
 	if h == nil {
