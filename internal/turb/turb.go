@@ -151,6 +151,9 @@ func (c *Controller) Backwash(id string, confirm <-chan bool) error {
 		}
 		return nil
 	case <-time.After(c.backwashTimeout):
+		// Reset the filter to filtering so it can be backwashed again;
+		// otherwise it stays stuck in StateBackwashing until manual reset.
+		_ = c.pool.CancelBackwash(id)
 		return filter.ErrPressureTimeout
 	}
 }
