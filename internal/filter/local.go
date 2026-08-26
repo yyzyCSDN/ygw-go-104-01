@@ -14,6 +14,9 @@ func (p *Pool) SetLocal(id string, on bool) error {
 	f.mu.Lock()
 	f.local = on
 	f.mu.Unlock()
+	// 现场就地操作生效期间及之后一段保护期内，自动反冲洗调度让位：任何就地切换都开启
+	// 一个保护窗口，避免自动策略紧接着对手洗过的滤池重复下发反冲。
+	p.localHoldUntil[id] = time.Now().Add(localHoldDefault)
 	return nil
 }
 
