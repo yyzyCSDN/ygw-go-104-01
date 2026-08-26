@@ -23,10 +23,11 @@ func (p *Pool) HeadLoss(id string) float64 {
 func (p *Pool) LastBackwash(id string) (time.Time, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.slot.ID == id {
-		return p.slot.Last, true
+	rec, ok := p.records[id]
+	if !ok {
+		return time.Time{}, false
 	}
-	return time.Time{}, false
+	return rec.Last, !rec.Last.IsZero()
 }
 
 func (p *Pool) BackwashDue(id string, interval time.Duration) bool {

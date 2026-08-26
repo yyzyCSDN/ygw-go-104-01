@@ -40,7 +40,7 @@ type Pool struct {
 	mu             sync.Mutex
 	filters        map[string]*Filter
 	order          []string
-	slot           Record
+	records        map[string]Record
 	headloss       map[string]float64
 	local          map[string]bool
 	localHoldUntil map[string]time.Time
@@ -50,6 +50,7 @@ func NewPool(ids ...string) *Pool {
 	pool := &Pool{
 		filters:        make(map[string]*Filter, len(ids)),
 		order:          append([]string(nil), ids...),
+		records:        make(map[string]Record, len(ids)),
 		headloss:       make(map[string]float64, len(ids)),
 		local:          make(map[string]bool, len(ids)),
 		localHoldUntil: make(map[string]time.Time, len(ids)),

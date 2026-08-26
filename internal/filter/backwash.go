@@ -27,11 +27,11 @@ func (p *Pool) ConfirmBackwash(id string) error {
 	if !ok {
 		return ErrUnknownFilter
 	}
-	rec := p.slot
+	rec := p.records[id]
 	rec.ID = id
 	rec.Count++
 	rec.Last = time.Now()
-	p.slot = rec
+	p.records[id] = rec
 	f.mu.Lock()
 	f.State = StateFiltering
 	f.mu.Unlock()
@@ -54,8 +54,6 @@ func (p *Pool) CancelBackwash(id string) error {
 func (p *Pool) RecordFor(id string) (Record, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.slot.ID == id {
-		return p.slot, true
-	}
-	return Record{}, false
+	rec, ok := p.records[id]
+	return rec, ok
 }

@@ -21,10 +21,7 @@ func (p *Pool) NextForBackwash() (string, error) {
 		if until := p.localHoldUntil[id]; time.Now().Before(until) {
 			continue
 		}
-		rec := Record{}
-		if p.slot.ID == id {
-			rec = p.slot
-		}
+		rec := p.records[id]
 		if !rec.Last.IsZero() && time.Since(rec.Last) < backwashMinInterval {
 			continue
 		}
